@@ -1,0 +1,25 @@
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    initial = True
+
+    dependencies = []
+
+    operations = [
+        migrations.CreateModel(
+            name='Tenant',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=255)),
+                ('slug', models.SlugField(max_length=64, unique=True)),
+                ('phone', models.CharField(max_length=32)),
+                ('address', models.CharField(blank=True, max_length=512)),
+                ('timezone', models.CharField(default='UTC', max_length=64)),
+                ('subscription_plan', models.CharField(choices=[('basic', 'Basic'), ('pro', 'Pro'), ('enterprise', 'Enterprise')], default='basic', max_length=32)),
+                ('is_active', models.BooleanField(default=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+            options={'ordering': ['name']},
+        ),
+    ]
