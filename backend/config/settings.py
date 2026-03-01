@@ -1,10 +1,52 @@
-from pathlib import Path
 import os
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / '.env')
+
+
+def _running_in_container() -> bool:
+    return Path('/.dockerenv').exists() or os.getenv('RUNNING_IN_DOCKER', '').lower() == 'true'
+
+
+def _local_service_host(service_name: str, default_port: str, local_default_port: str | None = None) -> tuple[str, str]:
+    host = os.getenv(f'{service_name.upper()}_HOST', service_name)
+    port = os.getenv(f'{service_name.upper()}_PORT', default_port)
+
+    if not _running_in_container() and host == service_name:
+        host = os.getenv(f'{service_name.upper()}_HOST_LOCAL', '127.0.0.1')
+        port = os.getenv(f'{service_name.upper()}_PORT_LOCAL', local_default_port or port)
+
+    return host, port
+
+
+def _local_service_url(env_name: str, service_name: str, default_url: str) -> str:
+    raw_url = os.getenv(env_name, default_url)
+
+    if _running_in_container():
+        return raw_url
+
+    parsed = urlsplit(raw_url)
+    if parsed.hostname != service_name:
+        return raw_url
+
+    local_host = os.getenv(f'{service_name.upper()}_HOST_LOCAL', '127.0.0.1')
+    local_port = os.getenv(f'{service_name.upper()}_PORT_LOCAL', str(parsed.port or 6379))
+    auth_part = ''
+    if parsed.username:
+        auth_part = parsed.username
+        if parsed.password:
+            auth_part = f'{auth_part}:{parsed.password}'
+        auth_part = f'{auth_part}@'
+
+    netloc = f'{auth_part}{local_host}:{local_port}'
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+POSTGRES_HOST, POSTGRES_PORT = _local_service_host('postgres', '5432', '5433')
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'change-me')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -63,8 +105,8 @@ DATABASES = {
         'NAME': os.getenv('POSTGRES_DB', 'servio'),
         'USER': os.getenv('POSTGRES_USER', 'servio'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'servio'),
-        'HOST': os.getenv('POSTGRES_HOST', 'postgres'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT,
     }
 }
 
@@ -96,7 +138,7 @@ REST_FRAMEWORK = {
     ],
 }
 
-REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+REDIS_URL = _local_service_url('REDIS_URL', 'redis', 'redis://redis:6379/0')
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TIMEZONE = TIME_ZONE
